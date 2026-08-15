@@ -154,6 +154,7 @@ for aid, belief in agent.beliefs.items():
         "True zone": true.zone,
         "Match": "✅" if belief.zone == true.zone else "❌",
         "Confidence": round(belief.zone_confidence, 2),
+        "Source": belief.zone_source if belief.zone_source else "—",
         "Last updated (tick)": belief.zone_updated if belief.zone_updated > -900 else "—",
         "Flagged for review": "🚩" if belief.flagged_for_review else "",
     })
