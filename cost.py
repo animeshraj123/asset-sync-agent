@@ -18,6 +18,8 @@ class CostTracker:
     skipped: list[str] = field(default_factory=list)
     human_flags: list[str] = field(default_factory=list)
     decisions_log: list[str] = field(default_factory=list)
+    friendly_log: list[str] = field(default_factory=list)
+    routine_log: list[str] = field(default_factory=list)
 
     def log_query(self, sensor):
         self.query_counts[sensor.name] = self.query_counts.get(sensor.name, 0) + 1
