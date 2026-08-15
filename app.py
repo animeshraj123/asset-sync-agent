@@ -1,10 +1,7 @@
 """
 app.py
 ------
-Streamlit dashboard for the asset synchronisation agent. Reuses the exact
-same World / sensors / Agent / CostTracker classes as demo.py — this is a
-visualisation layer, not a second implementation, so anything defensible
-about the CLI run is equally true here.
+Streamlit dashboard for the asset synchronisation agent.
 
 Run: streamlit run app.py
 """
@@ -47,8 +44,8 @@ def init_sim(seed: int, budget: float):
     st.session_state.sensors = sensors
     st.session_state.cost = cost
     st.session_state.agent = agent
-    st.session_state.history = []  # cumulative cost per tick, for the chart
-    st.session_state.tick_logs = {}  # tick -> list[str] of this tick's log lines
+    st.session_state.history = []
+    st.session_state.tick_logs = {}
 
 
 def run_one_tick():
@@ -56,25 +53,32 @@ def run_one_tick():
     agent = st.session_state.agent
     cost = st.session_state.cost
 
-    before = {"ops": cost.total_operations, "cost": cost.total_cost}
     world.step()
     unspent = agent.run_tick()
     tick = world.tick
 
-    lines = []
+    tech_lines = []
     for entry in cost.escalations:
         if entry.startswith(f"tick {tick}:"):
-            lines.append(f"🔺 ESCALATION — {entry}")
+            tech_lines.append(f"🔺 ESCALATION — {entry}")
     for entry in cost.human_flags:
         if entry.startswith(f"tick {tick}:"):
-            lines.append(f"🚩 REVIEW FLAG — {entry}")
+            tech_lines.append(f"🚩 REVIEW FLAG — {entry}")
     for entry in cost.decisions_log:
         if entry.startswith(f"tick {tick}:"):
-            lines.append(f"⚙️ decision — {entry}")
+            tech_lines.append(f"⚙️ decision — {entry}")
     for entry in cost.skipped:
         if entry.startswith(f"tick {tick}:"):
-            lines.append(f"⏭️ skip — {entry}")
-    st.session_state.tick_logs[tick] = lines
+            tech_lines.append(f"⏭️ skip — {entry}")
+
+    friendly_lines = [e for e in cost.friendly_log if True][-len(tech_lines):] if tech_lines else []
+    routine_lines = [e for e in cost.routine_log if e.startswith(f"tick {tick}:")]
+
+    st.session_state.tick_logs[tick] = {
+        "tech": tech_lines,
+        "friendly": friendly_lines,
+        "routine": routine_lines,
+    }
 
     st.session_state.history.append({
         "tick": tick,
@@ -89,6 +93,8 @@ st.sidebar.title("Simulation controls")
 seed = st.sidebar.number_input("Random seed", value=42, step=1)
 budget = st.sidebar.slider("Per-tick budget (cost units)", 5.0, 40.0, 20.0, step=1.0)
 n_ticks_full = st.sidebar.slider("Ticks for 'run full simulation'", 5, 40, 20)
+simple_mode = st.sidebar.checkbox("🧒 Simple explanation mode", value=False)
+show_routine = st.sidebar.checkbox("🔍 Show routine checks too (full detail)", value=False)
 
 if "world" not in st.session_state:
     init_sim(seed, budget)
@@ -116,7 +122,7 @@ st.sidebar.caption(
 st.title("📦 Asset Synchronisation Agent")
 st.caption(
     "Live inventory across 4 unreliable sensors. Every query, reconciliation, "
-    "escalation, and skip is a logged, cost-justified decision — not a fixed poll loop."
+    "escalation, and skip is a logged, cost-justified decision."
 )
 
 world = st.session_state.world
@@ -131,7 +137,6 @@ m3.metric("Total cost (units)", breakdown["total_cost_units"])
 m4.metric("Escalations", breakdown["escalations_to_expensive_sensor"])
 m5.metric("Human review flags", breakdown["human_review_flags"])
 
-# naive baseline comparison, live
 if world.tick > 0:
     naive_per_tick = sum(s.cost for s in st.session_state.sensors.values()) * len(world.assets)
     naive_total = naive_per_tick * world.tick
@@ -184,7 +189,10 @@ if not st.session_state.tick_logs:
     st.write("Run a tick to see the agent's reasoning.")
 else:
     for tick in sorted(st.session_state.tick_logs.keys(), reverse=True):
-        lines = st.session_state.tick_logs[tick]
+        entry = st.session_state.tick_logs[tick]
+        lines = entry["friendly"] if simple_mode else entry["tech"]
+        if show_routine:
+            lines = lines + entry["routine"]
         label = f"Tick {tick}" + (f" — {len(lines)} notable decisions" if lines else " — routine, nothing flagged")
         with st.expander(label, expanded=(tick == world.tick)):
             if lines:
